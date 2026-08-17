@@ -1,5 +1,21 @@
 from collections import UserDict
-from datetime import datetime, date
+from datetime import datetime, timedelta, date
+
+def input_error(func):
+    def inner(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (ValueError, IndexError, KeyError) as e:
+            return str(e) if str(e) else "Invalid input or argument missing."
+    return inner
+
+def parse_input(user_input):
+    parts = user_input.split()
+    if not parts:
+        return "", []
+    cmd = parts[0].strip().lower()
+    args = parts[1:]
+    return cmd, *args
 
 class Field:
     def __init__(self, value):
@@ -12,6 +28,7 @@ class Birthday(Field):
     def __init__(self, value):
         self.value = self._validate_and_parse(value)
 
+    @staticmethod
     def _validate_and_parse(date_str: str) -> date:
         date_format = "%d.%m.%Y"
 
@@ -59,69 +76,12 @@ class Record:
                 return
         raise ValueError("Номер не знайдено")
 
-    def add_contact(args, book: AddressBook):
-        name, phone, *_ = args
-        record = book.find(name)
-        message = "Contact updated."
-        if record is None:
-            record = Record(name)
-            book.add_record(record)
-            message = "Contact added."
-        if phone:
-            record.add_phone(phone)
-        return message
-
-    def change_contact(args, contacts):
-        if len(args) < 2:
-          return "Error: Please provide both name and new phone number."
-        name, new_phone = args
-        if name in contacts:
-         contacts[name] = new_phone
-        return "Contact updated."
-        return "Contact not found."
-
-    def show_phone(args, contacts):
-       if not args:
-        return "Error: Please provide a name."
-       name = args[0]
-       if name in contacts:
-        return contacts[name]
-       return "Contact not found."
-
-    def show_all(contacts):
-       if contacts:
-        return "\n".join(f"{name}: {phone}" for name, phone in contacts.items())
-       return "No contacts found."
-
-    def add_birthday(args, book: AddressBook):
-        name, bday = args
-        record = book.find(name)
-        if not record:
-          return f"Контакт з ім'ям '{name}' не знайдено."
-        record.add_birthday(bday)
-        return f"День народження для {name} успішно додано."
-
-    def show_birthday(args, book: AddressBook):
-        (name,) = args
-        record = book.find(name)
-        if not record:
-           return f"Контакт з ім'ям '{name}' не знайдено."
-        if not record.birthday:
-           return f"У контакту {name} не вказано день народження."
-        return f"День народження {name}: {record.birthday}"
-
-    def birthdays(args, book: AddressBook):
-        upcoming = book.get_upcoming_birthdays()
-        if not upcoming:
-           return "На наступному тижні немає днів народження."
-        result = []
-        for user in upcoming:
-            result.append(f"{user['name']}: {user['congratulation_date']}")
-        return "\n".join(result)
+    def add_birthday(self, birthday_str):
+        self.birthday = Birthday(birthday_str)
     
     def __str__(self):
         bday_str = (
-            f", birthady: {self.birthday}" if self.self.birthday else ""
+            f", birthday: {self.birthday}" if self.birthday else ""
         )
         phones_str = "; ".join(p.value for p in self.phones)
         return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}"
@@ -139,7 +99,7 @@ class AddressBook(UserDict):
             del self.data[name]
 
     def get_upcoming_birthdays(self):
-        upcoming_birthday = []
+        upcoming_birthdays = []
         today = datetime.today().date()
 
         for record in self.data.values():
@@ -150,9 +110,8 @@ class AddressBook(UserDict):
             birthday_this_year = bday.replace(year=today.year)
 
             if birthday_this_year < today:
-                birthday_this_year = birthday_this_year_replace(
-                    year=today.year + 1
-                )
+                birthday_this_year = birthday_this_year.replace(year=today.year + 1)
+
             days_until_birthday = (birthday_this_year - today).days
             if 0 <= days_until_birthday <= 7:
                 congratulation_date = birthday_this_year
@@ -161,7 +120,6 @@ class AddressBook(UserDict):
                     congratulation_date += timedelta(days=2)
                 elif congratulation_date.weekday() == 6:
                     congratulation_date += timedelta(days=1)
-
                 upcoming_birthdays.append(
                     {
                         "name": record.name.value,
@@ -173,6 +131,70 @@ class AddressBook(UserDict):
 
         return upcoming_birthdays
 
+@input_error
+def add_contact(args, book: AddressBook):
+        name, phone, *_ = args
+        record = book.find(name)
+        message = "Contact updated."
+        if record is None:
+            record = Record(name)
+            book.add_record(record)
+            message = "Contact added."
+        if phone:
+            record.add_phone(phone)
+        return message
+
+@input_error
+def change_contact(args, book: AddressBook):
+    name, old_phone, new_phone = args
+    record = book.find(name)
+    if not record:
+        return "Contact not found."
+    record.edit_phone(old_phone, new_phone)
+    return "Contact updated."
+
+@input_error
+def show_phone(args, book: AddressBook):
+    name = args[0]
+    record = book.find(name)
+    if not record:
+        return "Contact not found."
+    return f"{name}: {'; '.join(p.value for p in record.phones)}"
+
+@input_error
+def show_all(book: AddressBook):
+    if not book.data:
+        return "No contacts found."
+    return "\n".join(str(record) for record in book.data.values())
+    
+@input_error
+def add_birthday(args, book: AddressBook):
+        name, bday = args
+        record = book.find(name)
+        if not record:
+          return f"Контакт з ім'ям '{name}' не знайдено."
+        record.add_birthday(bday)
+        return f"День народження для {name} успішно додано."
+
+@input_error
+def show_birthday(args, book: AddressBook):
+        (name,) = args
+        record = book.find(name)
+        if not record:
+           return f"Контакт з ім'ям '{name}' не знайдено."
+        if not record.birthday:
+           return f"У контакту {name} не вказано день народження."
+        return f"День народження {name}: {record.birthday}"
+
+@input_error
+def birthdays(args, book: AddressBook):
+        upcoming = book.get_upcoming_birthdays()
+        if not upcoming:
+           return "На наступному тижні немає днів народження."
+        result = []
+        for user in upcoming:
+            result.append(f"{user['name']}: {user['congratulation_date']}")
+        return "\n".join(result)
 
 def main():
     book = AddressBook()
@@ -180,6 +202,9 @@ def main():
 
     while True:
         user_input = input("Enter a command: ")
+        if not user_input.strip():
+            continue
+
         command, *args = parse_input(user_input)
 
         if command in ["close", "exit"]:
